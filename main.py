@@ -1,11 +1,14 @@
-"""Ship the 24 November broadsheet to the grader's output directory.
+#!/usr/bin/env python3
+"""Deliver the finished 24 November broadsheet to the grader.
 
-The entry image lives in this repository as entry.png; this program checks
-it against the competition's limits (a whole PNG, 680x1024, at most 1 MiB)
-and copies it to /output/entry.png (or $MAKEFUN_OUTPUT_DIR outside the
-grader), then reads the copy back and compares hashes so a short write
-cannot slip through. Nothing is fetched and nothing varies between runs,
-so two runs produce identical bytes.
+The image is baked into this repository as entry.png. This program only
+checks it against the competition limits (a whole PNG, 680x1024, at most
+1 MiB) and copies it to /output/entry.png (or $MAKEFUN_OUTPUT_DIR when
+set), then reads the copy back and refuses to finish unless it matches
+the original byte for byte. No network, no randomness, no third-party
+code: two runs write identical bytes.
+
+    python3 main.py
 """
 import hashlib
 import os
@@ -14,41 +17,47 @@ import struct
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).parent
-SOURCE = HERE / "entry.png"
-LIMIT_BYTES = 1_048_576
-SIZE_W, SIZE_H = 680, 1024
+HERE = Path(__file__).resolve().parent
+IMAGE = HERE / "entry.png"
+MAX_BYTES = 1_048_576
+EXPECT_W, EXPECT_H = 680, 1024
+
+PNG_MAGIC = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 
 
-def die(reason):
-    sys.exit(f"entry.png rejected: {reason}")
+def reject(why):
+    sys.exit(f"entry.png rejected: {why}")
+
+
+def check(blob):
+    if len(blob) > MAX_BYTES:
+        reject(f"{len(blob)} bytes is over the {MAX_BYTES} cap")
+    if blob[:8] != PNG_MAGIC:
+        reject("missing PNG signature")
+    if blob[12:16] != b"IHDR":
+        reject("missing IHDR chunk")
+    w, h = struct.unpack(">II", blob[16:24])
+    if (w, h) != (EXPECT_W, EXPECT_H):
+        reject(f"dimensions are {w}x{h}, expected {EXPECT_W}x{EXPECT_H}")
+    if blob[-12:-8] != b"\x00\x00\x00\x00" or blob[-8:-4] != b"IEND":
+        reject("file does not end with an IEND chunk")
+    return w, h
 
 
 def main():
-    raw = SOURCE.read_bytes()
+    blob = IMAGE.read_bytes()
+    w, h = check(blob)
 
-    if len(raw) > LIMIT_BYTES:
-        die(f"{len(raw)} bytes exceeds the {LIMIT_BYTES} cap")
-    if raw[:8] != bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
-        die("missing PNG signature")
-    if raw[12:16] != b"IHDR":
-        die("missing IHDR chunk")
-    width, height = struct.unpack(">II", raw[16:24])
-    if (width, height) != (SIZE_W, SIZE_H):
-        die(f"dimensions are {width}x{height}, expected {SIZE_W}x{SIZE_H}")
-    if raw[-12:-8] != b"\x00\x00\x00\x00" or raw[-8:-4] != b"IEND":
-        die("file does not end with an IEND chunk")
+    out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / "entry.png"
+    shutil.copyfile(IMAGE, dest)
 
-    target_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / "entry.png"
-    shutil.copyfile(SOURCE, target)
-
-    blob = target.read_bytes()
-    if blob != raw:
-        die("copy differs from entry.png")
-    print(f"wrote {target} ({width}x{height}, {len(blob)} bytes, "
-          f"sha256 {hashlib.sha256(raw).hexdigest()})")
+    written = dest.read_bytes()
+    if written != blob:
+        reject("copy differs from entry.png")
+    print(f"wrote {dest} ({w}x{h}, {len(written)} bytes, "
+          f"sha256 {hashlib.sha256(blob).hexdigest()})")
 
 
 if __name__ == "__main__":

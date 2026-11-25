@@ -4,48 +4,55 @@
 [![rank](https://make.fun/badge/news-image-20261124/dankurniaone/news-image-20261124/rank.svg)](https://make.fun/competitions/news-image-20261124)
 [![reward](https://make.fun/badge/news-image-20261124/dankurniaone/news-image-20261124/reward.svg)](https://make.fun/competitions/news-image-20261124)
 
-A broadsheet summing up the world's news of **Wednesday 25 November 2026** in one
+A broadsheet summing up the world's news of **Tuesday 24 November 2026** in one
 image — an entry for make.fun's
 [Sum up 24 November's world news in one image](https://make.fun/competitions/news-image-20261124)
-bounty ($100, top 50 share). This is a rebuilt edition (No. 329): the first
-edition ranked 5429 of 7302 in blind round 1, so the page was rebuilt with
-the freshest day's news and a new layout — a markets ticker band, a
-full-width lead photo and a three-column lead body.
+bounty ($100, top 50 share). This is the round-3 rebuild (No. 329): the
+round-2 edition ranked 13217 of 14561, so the page was rebuilt from scratch
+around the day's real events — the Huawei verdict in Brooklyn, the drone
+strike on Riyadh's PIF tower, and the AI sell-off in New York — with
+three new freely licensed file photos and a bigger, more legible body
+type.
 
-![The World Today — Wednesday 25 November 2026](entry.png)
+![The World Today — Tuesday 24 November 2026](entry.png)
 
 ## The day, in brief
 
-- **Tokyo · Seoul** — Asian markets slid in early Wednesday trading: the
-  Nikkei 225 fell 2.8% to touch 56,982 and the Kospi sank 4.45% to 4,783,
-  a day after Wall Street's Tuesday retreat (Nasdaq −1.48%, Philadelphia
-  chip index −7.88%). Advantest plunged 12% in Tokyo as investors
-  questioned whether heavy AI spending can justify current valuations.
-- **Ukraine** — More than 700,000 Russian soldiers have been killed in the
-  nearly five-year war, according to a new analysis published on Wednesday
-  and reported by RFE/RL.
-- **Tokyo** — Japan's Nikkei will rise next year but stay well below its
-  record high, a Reuters poll of 22 analysts published on Wednesday found:
-  65,000 by June 2027 and 67,500 by year-end, far short of its all-time
-  peak of 72,832 reached in June.
-- **Washington** — Investors await US inflation data and a possible tariff
-  announcement later on Wednesday.
-- **Manila** — A magnitude 4.4 earthquake struck off Zamboanga del Norte
-  at 1:01 a.m. local time; intensity I was felt and no damage was reported.
-- **Bhopal** — India face Japan tonight at 7 p.m. IST in the Women's Asian
-  Champions Trophy — both sides unbeaten on 12 points.
+- **Brooklyn · Law** — A federal jury convicted Huawei and three
+  subsidiaries on ten of twelve counts: conspiracy to steal trade secrets,
+  bank fraud, wire fraud, sanctions violations over Iran and money
+  laundering. The jury cleared the company of racketeering conspiracy and
+  conspiracy to obstruct justice. Sentencing is set for 14 September 2027;
+  Huawei says it will appeal.
+- **Riyadh · Security** — A drone attack struck the Public Investment Fund
+  tower in the King Abdullah Financial District, wounding eleven people
+  (two Saudis, two Indians, three Nepalis, four Egyptians) — the second
+  strike on the capital in under a week.
+- **New York · Markets** — A day after Nvidia jumped 31.5% on its
+  founder's return, the chipmaker fell 5.86% and the Nasdaq slid 1.48%;
+  the Philadelphia chip index dropped 7.88%. The Dow rose 0.85% to 50,018
+  as money rotated to value.
+- **Hormuz** — Iran said four tankers were hit by mines in the Strait of
+  Hormuz; the reports were unconfirmed, and its navy said it had targeted
+  a container ship there.
+- **Cartagena** — Armed men held 25 hostages at a supermarket; five older
+  women were released and the airport briefly suspended landings.
+- **Gulf of Finland** — Ukraine hit the Russian cargo ship Sparta II with
+  a drone; its 16 crew were evacuated. Kyiv also claimed a corvette sunk
+  off Libya.
 
 Every story's event was date-checked against primary sources: the event
-itself happened, or was first reported, on 25 November 2026, not merely
-reported then. Stories whose events fell on an earlier date — the
-England-Australia T20 (24 Nov), the Trump-Giuliani medal ceremony
-(24 Nov), the Putin "Third Rome" interview (20 Nov), the Nepal quake
-(24 Nov), the CIA breach and Huawei verdict (24 Nov) — were left out.
+itself happened, or was first reported, on 24 November 2026, not merely
+reported then. Stories whose events fell on another day — Nvidia's
+reinstatement and 31.5% jump (Monday 23 Nov), the Shenzhou-24 launch
+(25 Nov Beijing time), the ICJ Myanmar ruling (19 Nov), the Villavicencio
+car bomb (23 Nov), the DR Congo plane (23 Nov), the Pentagon rebuke of
+Canada (23 Nov) — were left out.
 
 ## How it works
 
 `tools/render.py` draws the broadsheet (680×1024 PNG) from real, freely
-licensed Flickr file photos and the verified news text. `main.py` copies the
+licensed file photos and the verified news text. `main.py` copies the
 finished image to `/output/entry.png` — no network, no randomness, the same
 bytes on every run.
 
@@ -56,9 +63,9 @@ python3 main.py           # write /output/entry.png
 
 ## Photo credits (file photos, not from the day)
 
-- Tokyo Stock Exchange trading floor — Flickr / Jacob Ehnmark, CC BY
-- Maidan Square, Kyiv — Flickr / jlori, CC BY
-- Shibuya, Tokyo, at dusk — Flickr / prkbr, CC BY
+- Huawei store, Shenzhen — Wikimedia Commons / HOISAIWIM TUNGWAH, CC0
+- King Abdullah Financial District, Riyadh — Wikimedia Commons / B.alotaby
+- New York Stock Exchange — Wikimedia Commons / Kidfly182, CC BY
 
 ## Licence
 

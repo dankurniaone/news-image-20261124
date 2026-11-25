@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Build the 25 November 2026 front page as a 680x1024 PNG.
+"""Draw the 24 November 2026 front page: THE WORLD TODAY, 680x1024 PNG.
 
-THE WORLD TODAY, one day on one page: a markets ticker band, a lead on
-Asia's Wednesday slide with a full-width photo and a three-column body,
-two stories below it (the war's toll, the Nikkei poll), a shaded strip of
-three briefs, and a footer naming the sources. Everything is drawn with
-Pillow at double size and shrunk with LANCZOS, so the small type stays
-sharp when the page is read at 300 pixels across.
+One day on one page. A markets ticker band up top, then the lead — the
+Huawei verdict in Brooklyn — with a full-width file photo and a
+two-column body, then two stories side by side (the Riyadh drone strike
+and the AI sell-off in New York), a shaded strip of three briefs, and a
+footer naming the sources. Everything is drawn with Pillow at double
+resolution and shrunk with LANCZOS, so the type stays sharp when the
+page is read at 300 pixels across.
 
-The photographs are real freely licensed file photos (none taken today);
-the words are the day's verified news. Run from the repository root:
+The photographs are real freely licensed file photos (none taken on the
+day); every story's event happened, or was first reported, on Tuesday
+24 November 2026, checked against Reuters, CNN, the Wall Street
+Journal, the US Department of Justice and AP. Run from the repo root:
 
     python3 tools/render.py
 """
@@ -17,335 +20,339 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SS = 2                       # supersample factor
-PAGE = (680 * SS, 1024 * SS)
-SIDE = 28 * SS               # side margin
-INNER = PAGE[0] - 2 * SIDE   # text width
+SCALE = 2                       # draw at double size, shrink at the end
+W, H = 680 * SCALE, 1024 * SCALE
+MARGIN = 28 * SCALE
+TEXTW = W - 2 * MARGIN
 
-NEWS_PRINT = (246, 242, 231)
-SHADE = (233, 229, 218)
-BLACK = (17, 17, 17)
-SIGNAL = (164, 30, 34)
-MUTED = (90, 86, 78)
+PAPER = (246, 242, 231)
+TINT = (233, 229, 218)
+INK = (17, 17, 17)
+RED = (164, 30, 34)
+GREY = (90, 86, 78)
 
-F_SERIF = "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
-F_SERIF_B = "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
-F_SERIF_I = "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf"
-F_SANS = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
-F_SANS_B = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-
-
-def face(path, pts):
-    return ImageFont.truetype(path, pts * SS)
+SERIF = "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
+SERIF_B = "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
+SERIF_I = "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf"
+SANS = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+SANS_B = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 
 
-def fit_lines(draw, text, font, width):
-    """Split text into lines no wider than width (greedy, word by word)."""
-    out, current = [], ""
+def font(path, size):
+    return ImageFont.truetype(path, size * SCALE)
+
+
+def wrap(draw, text, face, width):
+    """Greedy word wrap: lines that fit inside width, in order."""
+    lines, line = [], ""
     for word in text.split():
-        trial = (current + " " + word).strip()
-        if draw.textlength(trial, font=font) <= width:
-            current = trial
+        trial = (line + " " + word).strip()
+        if draw.textlength(trial, font=face) <= width:
+            line = trial
+        elif line:
+            lines.append(line)
+            line = word
         else:
-            if current:
-                out.append(current)
-            current = word
-    if current:
-        out.append(current)
-    return out
+            lines.append(word)
+            line = ""
+    if line:
+        lines.append(line)
+    return lines
 
 
-def fill_frame(img, target_w, target_h, anchor=0.5):
-    """Crop img to the target aspect (anchored vertically), then scale it."""
+def cover(img, w, h, anchor=0.5):
+    """Crop img to w:h (anchor picks the vertical band), then scale."""
     iw, ih = img.size
-    want = target_w / target_h
-    have = iw / ih
-    if have > want:
+    want = w / h
+    if iw / ih > want:
         keep = int(ih * want)
-        left = (iw - keep) // 2
-        img = img.crop((left, 0, left + keep, ih))
+        img = img.crop(((iw - keep) // 2, 0, (iw - keep) // 2 + keep, ih))
     else:
         keep = int(iw / want)
         top = max(0, min(ih - keep, int((ih - keep) * anchor)))
         img = img.crop((0, top, iw, top + keep))
-    return img.resize((target_w, target_h), Image.LANCZOS)
+    return img.resize((w, h), Image.LANCZOS)
 
 
-class Sheet:
-    """A broadsheet page with a vertical cursor and drawing helpers."""
+class Page:
+    """One broadsheet page; y is the cursor, in scaled pixels."""
 
     def __init__(self):
-        self.img = Image.new("RGB", PAGE, NEWS_PRINT)
+        self.img = Image.new("RGB", (W, H), PAPER)
         self.d = ImageDraw.Draw(self.img)
-        self.y = 16 * SS
+        self.y = 14 * SCALE
 
-    def rule(self, weight=1, gap=6):
-        self.d.rectangle([SIDE, self.y, SIDE + INNER, self.y + weight * SS],
-                         fill=BLACK)
-        self.y += (weight + gap) * SS
+    def hline(self, weight=1, before=0, after=6):
+        self.y += before * SCALE
+        self.d.rectangle([MARGIN, self.y, MARGIN + TEXTW,
+                          self.y + weight * SCALE], fill=INK)
+        self.y += (weight + after) * SCALE
 
-    def heavy_rule(self):
-        self.d.rectangle([SIDE, self.y, SIDE + INNER, self.y + 3 * SS],
-                         fill=BLACK)
-        self.y += 8 * SS
+    def centre(self, text, face, fill=INK):
+        wide = self.d.textlength(text, font=face)
+        self.d.text(((W - wide) / 2, self.y), text, font=face, fill=fill)
+        self.y += int(face.size * 1.55)
 
-    def centred(self, text, font, fill=BLACK):
-        wide = self.d.textlength(text, font=font)
-        self.d.text(((PAGE[0] - wide) / 2, self.y), text, font=font, fill=fill)
-        self.y += int(font.size * 1.6)
-
-    def spaced(self, text, font, fill, step=2):
-        """A kicker line with widened letter spacing."""
-        cx = SIDE
+    def kicker(self, text, face, fill=RED, x=MARGIN):
         for ch in text:
-            self.d.text((cx, self.y), ch, font=font, fill=fill)
-            cx += self.d.textlength(ch, font=font) + step
-        self.y += int(font.size * 1.7)
+            self.d.text((x, self.y), ch, font=face, fill=fill)
+            x += self.d.textlength(ch, font=face) + 2
+        self.y += int(face.size * 1.7)
 
-    def block(self, text, font, width, x=SIDE, fill=BLACK, leading=1.35):
-        """A wrapped paragraph; returns nothing, advances the cursor."""
-        lh = int(font.size * leading)
-        for line in fit_lines(self.d, text, font, width):
-            self.d.text((x, self.y), line, font=font, fill=fill)
-            self.y += lh
+    def para(self, text, face, width, x=MARGIN, fill=INK, leading=1.4):
+        step = int(face.size * leading)
+        for line in wrap(self.d, text, face, width):
+            self.d.text((x, self.y), line, font=face, fill=fill)
+            self.y += step
 
-    def photo(self, path, width, height_pts, anchor=0.5):
+    def picture(self, path, width, height, anchor=0.5):
         shot = Image.open(path).convert("RGB")
-        tall = height_pts * SS
-        self.img.paste(fill_frame(shot, width, tall, anchor), (SIDE, self.y))
-        self.y += tall + 4 * SS
+        tall = height * SCALE
+        self.img.paste(cover(shot, width, tall, anchor), (MARGIN, self.y))
+        self.y += tall + 4 * SCALE
 
-    def save(self):
-        final = self.img.resize((680, 1024), Image.LANCZOS)
-        dest = os.path.join(REPO, "entry.png")
-        final.save(dest, "PNG")
-        print("wrote entry.png", final.size,
-              os.path.getsize(dest), "bytes,",
-              "content ends at y =", self.y // SS, "(logical)")
+    def caption(self, text):
+        self.d.text((MARGIN, self.y), text, font=font(SERIF_I, 11),
+                    fill=GREY)
+        self.y += int(11 * SCALE * 1.7) + 2 * SCALE
+
+    def finish(self):
+        small = self.img.resize((680, 1024), Image.LANCZOS)
+        dest = os.path.join(ROOT, "entry.png")
+        small.save(dest, "PNG")
+        print("wrote entry.png", small.size, os.path.getsize(dest),
+              "bytes; content ends at y =", self.y // SCALE, "logical")
 
 
-# ------------------------------------------------------------------ the day
-# Every item below is an event of Wednesday 25 November 2026, checked the
-# same day against the primary reporting: the Wall Street Journal and
-# JBizNews on the morning markets, RFE/RL on the new casualty analysis,
-# Reuters on its Nikkei poll, PHIVOLCS on the quake, Hockey India on the
-# hockey fixture. Items whose events fell earlier — the England-Australia
-# T20 (24 Nov), the Trump-Giuliani medal ceremony (24 Nov), the Putin
-# "Third Rome" interview (20 Nov), the Nepal quake (24 Nov), the CIA
-# breach and Huawei verdict (24 Nov) — were left out.
-TICKER = ("MARKETS   NIKKEI -2.8%   ·   KOSPI -4.45%   ·   "
-          "NASDAQ -1.48%   ·   S&P 500 -0.50%   ·   DOW +0.85%")
+# ---------------------------------------------------------------- the day
+# Every item below is an event of Tuesday 24 November 2026, checked the
+# same day against the primary reporting. Items whose events fell on
+# another day were left out: Nvidia's reinstatement and 31.5% jump
+# (Monday 23 Nov), the Shenzhou-24 launch (25 Nov Beijing time), the
+# ICJ Myanmar ruling (19 Nov), the Villavicencio car bomb (23 Nov),
+# the DR Congo plane (23 Nov), the Pentagon rebuke of Canada (23 Nov).
 
-LEAD_KICKER = "TOKYO · SEOUL — MARKETS"
-LEAD_HEAD = "ASIAN MARKETS SLIDE AS AI DOUBTS RETURN"
-LEAD_DECK = ("Tokyo's Nikkei falls 2.8% and Seoul's Kospi sinks 4.45% in "
-             "early Wednesday trading, after a tech-led retreat on "
-             "Wall Street.")
-LEAD_PHOTO = os.path.join(REPO, "assets", "markets.jpg")
-LEAD_BODY = ("Tokyo's Nikkei 225 fell 2.8 per cent in early trading on "
-             "Wednesday, touching 56,982, while Seoul's Kospi sank 4.45 "
-             "per cent to 4,783 and the Kosdaq lost 2.78 per cent — a day "
-             "after Wall Street's Tuesday retreat, when the Nasdaq fell "
-             "1.48 per cent and the Philadelphia chip index dropped 7.88 "
-             "per cent. Advantest, the chip-testing maker, plunged 12 per "
-             "cent in Tokyo. Investors questioned whether heavy spending "
-             "on artificial intelligence can justify current valuations, "
-             "and awaited US inflation data and a possible tariff "
-             "announcement later on Wednesday.")
+TICKER = ("NIKKEI +3.91%   ·   KOSPI +6%   ·   DOW +0.85%   ·   "
+          "NASDAQ -1.48%   ·   S&P -0.50%   ·   NVIDIA -5.86%")
 
-LEFT_KICKER = "UKRAINE — THE WAR'S TOLL"
-LEFT_HEAD = "700,000 RUSSIAN SOLDIERS KILLED, NEW ANALYSIS FINDS"
-LEFT_PHOTO = os.path.join(REPO, "assets", "kyiv.jpg")
-LEFT_BODY = ("More than 700,000 Russian soldiers have been killed in the "
-             "nearly five-year war on Ukraine, according to a new analysis "
-             "published on Wednesday. The figure, reported by RFE/RL, "
-             "underlines Moscow's determination to conquer Ukrainian "
-             "territory — and Kyiv's determination to inflict mass "
-             "casualties in return.")
+LEAD = {
+    "kicker": "BROOKLYN · LAW",
+    "head": "HUAWEI GUILTY ON 10 COUNTS",
+    "deck": ("A federal jury convicts the Chinese telecom giant of stealing "
+             "trade secrets, bank fraud and busting Iran sanctions — and "
+             "clears it of racketeering."),
+    "photo": os.path.join(ROOT, "assets", "huawei-store.jpg"),
+    "anchor": 0.08,
+    "caption": ("A Huawei store in Shenzhen. (File photo: Wikimedia "
+                "Commons / HOISAIWIM TUNGWAH, CC0)"),
+    "body": ("A federal jury in Brooklyn convicted Huawei and three "
+             "subsidiaries on ten of twelve counts on Tuesday, ending a "
+             "case that began in 2018: conspiracy to steal trade secrets, "
+             "bank fraud, wire fraud, sanctions violations over Iran and "
+             "money laundering. The jury cleared the company of "
+             "racketeering conspiracy and conspiracy to obstruct justice. "
+             "Prosecutors told the court Huawei stole source code from "
+             "Cisco, antenna technology from Quintel and robot technology "
+             "from T-Mobile, and more than sixty witnesses testified "
+             "across a trial of two to three months. Sentencing is set for "
+             "14 September 2027, and Huawei says it will appeal."),
+}
 
-RIGHT_KICKER = "TOKYO — MARKETS"
-RIGHT_HEAD = "NIKKEI SEEN RISING NEXT YEAR, SHORT OF RECORD"
-RIGHT_PHOTO = os.path.join(REPO, "assets", "shibuya.jpg")
-RIGHT_BODY = ("Japan's Nikkei will rise next year but stay well below its "
-              "record high, a Reuters poll of 22 analysts published on "
-              "Wednesday found. The median forecast puts the index at "
-              "65,000 by June 2027 and 67,500 by year-end — far short of "
-              "its all-time peak of 72,832 reached in June. Investors are "
-              "reassessing AI-linked bets after the US midterm elections.")
+LEFT = {
+    "kicker": "RIYADH · SECURITY",
+    "head": "DRONE HITS RIYADH PIF TOWER, 11 WOUNDED",
+    "photo": os.path.join(ROOT, "assets", "riyadh-kafd.jpg"),
+    "anchor": 0.6,
+    "caption": ("KAFD, Riyadh. (Wikimedia Commons / B.alotaby)"),
+    "body": ("A drone attack struck the Public Investment Fund tower in "
+             "Riyadh's King Abdullah Financial District on Tuesday, "
+             "wounding eleven people — two Saudis, two Indians, three "
+             "Nepalis and four Egyptians. It was the second strike on the "
+             "capital in under a week, in a campaign the Houthis have "
+             "claimed."),
+}
+
+RIGHT = {
+    "kicker": "NEW YORK · MARKETS",
+    "head": "AI RALLY FIZZLES IN A DAY",
+    "photo": os.path.join(ROOT, "assets", "nyse.jpg"),
+    "anchor": 0.5,
+    "caption": ("The New York Stock Exchange. (Kidfly182, CC BY)"),
+    "body": ("A day after Nvidia's shares jumped 31.5 per cent on its "
+             "founder's return, the chipmaker fell 5.86 per cent on "
+             "Tuesday and the Nasdaq slid 1.48 per cent. The Philadelphia "
+             "chip index dropped 7.88 per cent; Micron fell 10.97 per "
+             "cent and Analog Devices 17.4 per cent. The Dow rose 0.85 "
+             "per cent to 50,018 as money rotated to value, the S&P 500 "
+             "slipped 0.50 per cent, Anthropic fell below its $83 listing "
+             "price, and the Trump administration is said to be readying "
+             "fresh tariffs on China and the EU."),
+}
 
 BRIEFS = [
-    ("WASHINGTON",
-     "Investors await US inflation data and a possible tariff announcement "
-     "later on Wednesday, after Tuesday's split Wall Street session."),
-    ("MANILA",
-     "A magnitude 4.4 earthquake struck off Zamboanga del Norte at 1:01 "
-     "a.m. local time; intensity I was felt and no damage was reported."),
-    ("BHOPAL",
-     "India face Japan tonight at 7 p.m. IST in the Women's Asian "
-     "Champions Trophy — both sides unbeaten on 12 points."),
+    ("HORMUZ",
+     "Iran said four tankers were hit by mines in the Strait of Hormuz; "
+     "the reports were unconfirmed, and its navy said it had targeted a "
+     "container ship there."),
+    ("CARTAGENA",
+     "Armed men held 25 hostages at a supermarket in Cartagena; five "
+     "older women were released and the airport briefly suspended "
+     "landings."),
+    ("GULF OF FINLAND",
+     "Ukraine hit the Russian cargo ship Sparta II with a drone in the "
+     "Gulf of Finland; its 16 crew were evacuated. Kyiv also claimed a "
+     "corvette sunk off Libya."),
 ]
 
-FOOT_A = ("All events here happened, or were first reported, on Wednesday "
-          "25 November 2026. Sources: Wall Street Journal; JBizNews; "
-          "RFE/RL; Reuters; PHIVOLCS; Hockey India.")
-FOOT_B = ("Photos are freely licensed file photos, not from today: Tokyo "
-          "Stock Exchange trading floor (Flickr / Jacob Ehnmark, CC BY); "
-          "Maidan Square, Kyiv (Flickr / jlori, CC BY); Shibuya, Tokyo "
-          "(Flickr / prkbr, CC BY).")
+FOOT_A = ("All events here happened, or were first reported, on Tuesday "
+          "24 November 2026. Sources: Reuters; CNN; The Wall Street "
+          "Journal; US Department of Justice; AP.")
+FOOT_B = ("Photos are freely licensed file photos, not from the day: "
+          "Huawei store, Shenzhen (Wikimedia Commons / HOISAIWIM "
+          "TUNGWAH, CC0); King Abdullah Financial District, Riyadh "
+          "(Wikimedia Commons / B.alotaby); New York Stock Exchange "
+          "(Wikimedia Commons / Kidfly182, CC BY).")
 
 
-def masthead(page):
-    page.centred("THE WORLD TODAY", face(F_SERIF_B, 40))
-    page.y -= int(40 * SS * 0.4)
-    page.centred("WEDNESDAY, 25 NOVEMBER 2026", face(F_SANS_B, 15))
-    page.centred("ONE DAY  ·  ONE PAGE  ·  No. 329", face(F_SANS, 11),
-                 fill=MUTED)
-    page.y += 6 * SS
-    page.heavy_rule()
-    page.rule(weight=1, gap=8)
+def masthead(p):
+    p.centre("THE WORLD TODAY", font(SERIF_B, 36))
+    p.y -= int(36 * SCALE * 0.35)
+    p.centre("TUESDAY, 24 NOVEMBER 2026", font(SANS_B, 14))
+    p.centre("ONE DAY  ·  ONE PAGE  ·  No. 329", font(SANS, 11), fill=GREY)
+    p.y += 4 * SCALE
+    p.d.rectangle([MARGIN, p.y, MARGIN + TEXTW, p.y + 3 * SCALE], fill=INK)
+    p.y += 8 * SCALE
+    p.hline(weight=1, after=8)
 
 
-def ticker(page):
-    font = face(F_SANS_B, 12)
-    tall = 28 * SS
-    page.d.rectangle([SIDE, page.y, SIDE + INNER, page.y + tall], fill=BLACK)
-    wide = page.d.textlength(TICKER, font=font)
-    tx = SIDE + (INNER - wide) // 2
-    ty = page.y + (tall - font.size) // 2 - 2 * SS
-    page.d.text((tx, ty), TICKER, font=font, fill=NEWS_PRINT)
-    page.y += tall + 6 * SS
+def ticker(p):
+    size = 12
+    face = font(SANS_B, size)
+    while p.d.textlength(TICKER, font=face) > TEXTW - 16 * SCALE and size > 9:
+        size -= 1
+        face = font(SANS_B, size)
+    tall = 26 * SCALE
+    p.d.rectangle([MARGIN, p.y, MARGIN + TEXTW, p.y + tall], fill=INK)
+    wide = p.d.textlength(TICKER, font=face)
+    p.d.text((MARGIN + (TEXTW - wide) // 2,
+              p.y + (tall - face.size) // 2 - 2 * SCALE),
+             TICKER, font=face, fill=PAPER)
+    p.y += tall + 6 * SCALE
 
 
-def lead(page):
-    page.spaced(LEAD_KICKER, face(F_SANS_B, 13), SIGNAL)
-    head = face(F_SERIF_B, 34)
-    for line in fit_lines(page.d, LEAD_HEAD, head, INNER):
-        page.d.text((SIDE, page.y), line, font=head, fill=BLACK)
-        page.y += int(34 * SS * 1.1)
-    page.y += 2 * SS
-    page.block(LEAD_DECK, face(F_SERIF, 14), INNER, leading=1.45)
-    page.y += 4 * SS
-    page.photo(LEAD_PHOTO, INNER, 104, anchor=0.5)
-    page.d.text((SIDE, page.y),
-                "The Tokyo Stock Exchange trading floor. "
-                "(File photo: Flickr / Jacob Ehnmark, CC BY)",
-                font=face(F_SERIF_I, 11), fill=MUTED)
-    page.y += int(11 * SS * 1.7) + 2 * SS
-    # Three-column body: fit all lines, then deal them across 3 columns.
-    body = face(F_SERIF, 12)
-    gap = 14 * SS
-    col = (INNER - 2 * gap) // 3
-    lines = fit_lines(page.d, LEAD_BODY, body, col)
-    per = (len(lines) + 2) // 3
-    lh = int(12 * SS * 1.5)
-    top = page.y
-    deepest = top
-    for c in range(3):
-        chunk = lines[c * per:(c + 1) * per]
+def lead(p):
+    p.kicker(LEAD["kicker"], font(SANS_B, 13))
+    head = font(SERIF_B, 33)
+    for line in wrap(p.d, LEAD["head"], head, TEXTW):
+        p.d.text((MARGIN, p.y), line, font=head, fill=INK)
+        p.y += int(33 * SCALE * 1.12)
+    p.y += 2 * SCALE
+    p.para(LEAD["deck"], font(SERIF, 14), TEXTW, leading=1.45)
+    p.y += 4 * SCALE
+    p.picture(LEAD["photo"], TEXTW, 120, anchor=LEAD["anchor"])
+    p.caption(LEAD["caption"])
+    # Two-column body: wrap the whole text to one column, then split.
+    body = font(SERIF, 13)
+    gap = 16 * SCALE
+    col = (TEXTW - gap) // 2
+    lines = wrap(p.d, LEAD["body"], body, col)
+    half = (len(lines) + 1) // 2
+    step = int(13 * SCALE * 1.5)
+    top = p.y
+    bottom = top
+    for c in range(2):
         yy = top
-        for line in chunk:
-            page.d.text((SIDE + c * (col + gap), yy), line, font=body,
-                        fill=BLACK)
-            yy += lh
-        deepest = max(deepest, yy)
-    page.y = deepest + 4 * SS
-    page.rule(weight=1, gap=6)
+        for line in lines[c * half:(c + 1) * half]:
+            p.d.text((MARGIN + c * (col + gap), yy), line, font=body,
+                     fill=INK)
+            yy += step
+        bottom = max(bottom, yy)
+    p.y = bottom + 4 * SCALE
+    p.hline(weight=1, after=6)
 
 
-def middle(page):
-    start = page.y
-    half = (INNER - 20 * SS) // 2
-    kick = face(F_SANS_B, 13)
-    head = face(F_SERIF_B, 22)
-    body = face(F_SERIF, 13)
-    cap = face(F_SERIF_I, 11)
-
-    def one(x, kicker, headline, photo, anchor, caption, text):
-        yy = start
-        cx = x
-        for ch in kicker:
-            page.d.text((cx, yy), ch, font=kick, fill=SIGNAL)
-            cx += page.d.textlength(ch, font=kick) + 2
-        yy += int(13 * SS * 1.7)
-        for line in fit_lines(page.d, headline, head, half):
-            page.d.text((x, yy), line, font=head, fill=BLACK)
-            yy += int(22 * SS * 1.12)
-        yy += 3 * SS
-        shot = Image.open(photo).convert("RGB")
-        tall = 50 * SS
-        page.img.paste(fill_frame(shot, half, tall, anchor), (x, yy))
-        yy += tall + 4 * SS
-        page.d.text((x, yy), caption, font=cap, fill=MUTED)
-        yy += int(11 * SS * 1.7) + 2 * SS
-        lh = int(13 * SS * 1.5)
-        for line in fit_lines(page.d, text, body, half):
-            page.d.text((x, yy), line, font=body, fill=BLACK)
-            yy += lh
-        return yy
-
-    end_l = one(SIDE, LEFT_KICKER, LEFT_HEAD, LEFT_PHOTO, 0.5,
-                "Maidan Square, Kyiv. (File photo: Flickr / jlori, CC BY)",
-                LEFT_BODY)
-    end_r = one(SIDE + half + 20 * SS, RIGHT_KICKER, RIGHT_HEAD, RIGHT_PHOTO,
-                0.4, "Shibuya, Tokyo, at dusk. (File photo: Flickr / "
-                "prkbr, CC BY)", RIGHT_BODY)
-    page.y = max(end_l, end_r)
-    split = SIDE + half + 10 * SS
-    page.d.rectangle([split, start, split + 1 * SS, page.y - 4 * SS], fill=BLACK)
-    page.y += 4 * SS
-    page.rule(weight=1, gap=6)
+def story(p, x, width, item, photo_h):
+    start = p.y
+    p.kicker(item["kicker"], font(SANS_B, 13), x=x)
+    head = font(SERIF_B, 21)
+    for line in wrap(p.d, item["head"], head, width):
+        p.d.text((x, p.y), line, font=head, fill=INK)
+        p.y += int(21 * SCALE * 1.12)
+    p.y += 3 * SCALE
+    shot = Image.open(item["photo"]).convert("RGB")
+    tall = photo_h * SCALE
+    p.img.paste(cover(shot, width, tall, item["anchor"]), (x, p.y))
+    p.y += tall + 4 * SCALE
+    p.d.text((x, p.y), item["caption"], font=font(SERIF_I, 11), fill=GREY)
+    p.y += int(11 * SCALE * 1.7) + 2 * SCALE
+    p.para(item["body"], font(SERIF, 12.5), width, x=x, leading=1.45)
+    return p.y
 
 
-def briefs(page):
-    # Fit the briefs first so the shaded box can be drawn to fit.
-    head = face(F_SANS_B, 12)
-    body = face(F_SERIF, 13)
+def middle(p):
+    start = p.y
+    gap = 20 * SCALE
+    half = (TEXTW - gap) // 2
+    end_l = story(p, MARGIN, half, LEFT, 54)
+    p.y = start
+    end_r = story(p, MARGIN + half + gap, half, RIGHT, 54)
+    p.y = max(end_l, end_r)
+    split = MARGIN + half + gap // 2
+    p.d.rectangle([split, start, split + 1 * SCALE, p.y - 4 * SCALE],
+                  fill=INK)
+    p.y += 4 * SCALE
+    p.hline(weight=1, after=6)
+
+
+def briefs(p):
+    head = font(SANS_B, 12)
+    body = font(SERIF, 12.5)
     count = len(BRIEFS)
-    gap = 16 * SS
-    cell = (INNER - (count - 1) * gap) // count
+    gap = 16 * SCALE
+    cell = (TEXTW - (count - 1) * gap) // count
     fitted = []
-    deepest_lines = 0
+    most = 0
     for place, text in BRIEFS:
-        lines = fit_lines(page.d, text, body, cell)
+        lines = wrap(p.d, text, body, cell)
         fitted.append((place, lines))
-        deepest_lines = max(deepest_lines, len(lines))
-    box_h = (int(13 * SS * 1.7) + int(12 * SS * 1.7)
-             + deepest_lines * int(13 * SS * 1.45) + 10 * SS)
-    top = page.y
-    page.d.rectangle([SIDE, top, SIDE + INNER, top + box_h], fill=SHADE)
-    page.y = top + 7 * SS
-    page.spaced("THE DAY IN BRIEF", face(F_SANS_B, 13), BLACK)
-    page.y -= int(13 * SS * 0.35)
+        most = max(most, len(lines))
+    box = (int(13 * SCALE * 1.7) + int(12 * SCALE * 1.7)
+           + most * int(12.5 * SCALE * 1.45) + 8 * SCALE)
+    top = p.y
+    p.d.rectangle([MARGIN, top, MARGIN + TEXTW, top + box], fill=TINT)
+    p.y = top + 7 * SCALE
+    p.kicker("THE DAY IN BRIEF", font(SANS_B, 13), fill=INK)
+    p.y -= int(13 * SCALE * 0.35)
     for i, (place, lines) in enumerate(fitted):
-        bx = SIDE + 10 * SS + i * (cell + gap)
-        page.d.text((bx, page.y), place, font=head, fill=SIGNAL)
-        yy = page.y + int(12 * SS * 1.7)
-        lh = int(13 * SS * 1.45)
+        bx = MARGIN + 10 * SCALE + i * (cell + gap)
+        p.d.text((bx, p.y), place, font=head, fill=RED)
+        yy = p.y + int(12 * SCALE * 1.7)
+        step = int(12.5 * SCALE * 1.45)
         for line in lines:
-            page.d.text((bx, yy), line, font=body, fill=BLACK)
-            yy += lh
-    page.y = top + box_h + 6 * SS
-    page.rule(weight=1, gap=4)
+            p.d.text((bx, yy), line, font=body, fill=INK)
+            yy += step
+    p.y = top + box + 6 * SCALE
+    p.hline(weight=1, after=4)
 
 
-def footer(page):
-    foot = face(F_SANS, 8)
-    page.block(FOOT_A, foot, INNER, fill=MUTED, leading=1.55)
-    page.y += 2 * SS
-    page.block(FOOT_B, foot, INNER, fill=MUTED, leading=1.55)
+def footer(p):
+    foot = font(SANS, 8)
+    p.para(FOOT_A, foot, TEXTW, fill=GREY, leading=1.55)
+    p.y += 2 * SCALE
+    p.para(FOOT_B, foot, TEXTW, fill=GREY, leading=1.55)
 
 
 def main():
-    page = Sheet()
-    masthead(page)
-    ticker(page)
-    lead(page)
-    middle(page)
-    briefs(page)
-    footer(page)
-    page.save()
+    p = Page()
+    masthead(p)
+    ticker(p)
+    lead(p)
+    middle(p)
+    briefs(p)
+    footer(p)
+    p.finish()
 
 
 if __name__ == "__main__":
